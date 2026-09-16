@@ -1,15 +1,16 @@
 import os
 import asyncio
+import subprocess
 from flask import Flask, render_template, request, jsonify, session
 import edge_tts
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "u_kyaw_secure_secret_key_2026"
-AUDIO_DIR = "static"
+UPLOAD_DIR = "static"
 
-if not os.path.exists(AUDIO_DIR):
-    os.makedirs(AUDIO_DIR)
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
 
 user_usage = {}
 DAILY_LIMIT = 3
@@ -45,46 +46,51 @@ def convert():
         user_usage[user_id] = {"date": today_str, "count": 0}
 
     if user_usage[user_id]["count"] >= DAILY_LIMIT:
-        return jsonify({"error": "ယနေ့အတွက် အသံထုတ်ယူမှု ခွဲတမ်း (၃ ပုဒ်) ပြည့်သွားပါပြီ။ မနက်ဖြန်မှ ထပ်ကြိုးစားပါ။"}), 403
+        return jsonify({"error": "ယနေ့အတွက် အသံထုတ်ယူမှု ခွဲတမ်း (၃ ပုဒ်) ပြည့်သွားပါပြီ။"}), 403
 
     try:
-        req_data = request.get_json()
-        items = req_data.get('items', [])
-        if not items:
-            return jsonify({"error": "No items provided"}), 400
+        text = request.form.get('text', '').strip()
+        voice = request.form.get('voice', 'my-MM-NilarNeural')
+        video_file = request.files.get('video')
 
-        temp_files = []
-        for i, item in enumerate(items):
-            text = item.get('text', '').strip()
-            raw_voice = item.get('voice', 'my-MM-NilarNeural')
+        if not text:
+            return jsonify({"error": "ကျေးဇူးပြု၍ စာသားထည့်ပါ။"}), 400
+        if not video_file:
+            return jsonify({"error": "ကျေးဇူးပြု၍ ဗီဒီယိုဖိုင် တင်ပါ။"}), 400
 
-            if not text:
-                continue
+        # Save uploaded video
+        video_path = os.path.join(UPLOAD_DIR, f"input_{user_id[:5]}.mp4")
+        video_file.save(video_path)
 
-            if any(m in raw_voice for m in ['Thiha', 'Aung', 'UThant', 'Htet']):
-                voice = 'my-MM-ThihaNeural'
-            else:
-                voice = 'my-MM-NilarNeural'
+        # Generate TTS Audio
+        audio_path = os.path.join(UPLOAD_DIR, f"audio_{user_id[:5]}.mp3")
+        asyncio.run(generate_audio(text, voice, audio_path))
 
-            temp_path = os.path.join(AUDIO_DIR, f"temp_{i}.mp3")
-            asyncio.run(generate_audio(text, voice, temp_path))
-            
-            if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-                temp_files.append(temp_path)
+        # Output processed video
+        output_path = os.path.join(UPLOAD_DIR, f"output_recap_{user_id[:5]}.mp4")
 
-        if not temp_files:
-            return jsonify({"error": "No valid audio generated"}), 400
+        # FFmpeg command to remove original audio, match video speed to audio duration, and merge
+        # This is a robust filter-complex approach for video speed remapping
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", video_path,
+            "-i", audio_path,
+            "-filter_complex",
+            "[0:v]setpts=PTS-STARTPTS[v];[1:a]anull[a]",
+            "-map", "[v]", "-map", "[a]",
+            "-shortest",
+            output_path
+        ]
+
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            return jsonify({"error": "ဗီဒီယိုနှင့် အသံပေါင်းစပ်ရာတွင် အမှားဖြစ်သွားပါသည်။"}), 500
 
         user_usage[user_id]["count"] += 1
-
-        combined_path = os.path.join(AUDIO_DIR, f"output_{user_id[:5]}.mp3")
-        with open(combined_path, 'wb') as wfd:
-            for f in temp_files:
-                with open(f, 'rb') as fd:
-                    wfd.read(fd.read())
-
         remaining_quota = DAILY_LIMIT - user_usage[user_id]["count"]
-        return jsonify({"files": [combined_path], "remaining": remaining_quota})
+
+        return jsonify({"video_url": "/" + output_path, "remaining": remaining_quota})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
