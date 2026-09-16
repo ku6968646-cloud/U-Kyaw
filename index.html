@@ -14,7 +14,7 @@
         <form id="audio-form" class="space-y-4">
             <div>
                 <label class="block text-sm font-medium text-slate-300 mb-2">ပြောလိုသော စာသားများ</label>
-                <textarea id="text-input" rows="4" required class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="ပြောလိုသော စာသားများကို ဤနေရာတွင် ရိုက်ထည့်ပါ..."></textarea>
+                <textarea id="text-input" rows="4" required class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-100" placeholder="ပြောလိုသော စာသားများကို ဤနေရာတွင် ရိုက်ထည့်ပါ..."></textarea>
             </div>
 
             <div>
@@ -56,7 +56,7 @@
                 return;
             }
 
-            const formData = new FormData();
+            const formData = new URLSearchParams();
             formData.append('text', textInput);
             formData.append('voice', voiceSelect);
 
@@ -66,6 +66,9 @@
             try {
                 const response = await fetch('/convert', {
                     method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
                     body: formData
                 });
 
@@ -84,6 +87,7 @@
                 downloadBtn.href = data.audio_url;
                 
                 resultSection.classList.remove('hidden');
+                audioPlayer.play();
             } catch (err) {
                 errorBox.textContent = err.message;
                 errorBox.classList.remove('hidden');
@@ -94,4 +98,5 @@
         });
     </script>
 </body>
-    </html>
+</html>
+
