@@ -1,1 +1,90 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Burmese AI Movie Recap Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
+    <div class="max-w-2xl mx-auto bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
+        <h1 class="text-2xl font-bold mb-2 text-center text-indigo-400">🎙️ မြန်မာ AI အသံထွက်စတူဒီယို</h1>
+        <p class="text-sm text-slate-400 text-center mb-6">ယနေ့ကျန်ရှိသော အသံထုတ်ယူခွင့်: <span id="quota-remaining" class="font-bold text-emerald-400">{{ remaining }}</span> / 3 ပုဒ်</p>
 
+        <div id="items-container" class="space-y-4 mb-4">
+            <div class="item-card bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-3">
+                <textarea class="text-input w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" rows="3" placeholder="ပြောလိုသော စာသားများကို ဤနေရာတွင် ရိုက်ထည့်ပါ..."></textarea>
+                <div class="flex justify-between items-center">
+                    <select class="voice-select bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-slate-300 focus:outline-none">
+                        <option value="my-MM-NilarNeural">မနီလာ (Nilar - အမျိုးသမီး)</option>
+                        <option value="my-MM-ThihaNeural">ကိုသီဟ (Thiha - အမျိုးသား)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <button id="convert-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition duration-200 shadow-lg">အသံဖိုင် ထုတ်ယူမည် (Generate Audio)</button>
+
+        <div id="result-section" class="mt-6 hidden">
+            <h2 class="text-lg font-semibold mb-2 text-slate-300">ရလဒ် အသံဖိုင်:</h2>
+            <audio id="audio-player" controls class="w-full mb-4"></audio>
+            <a id="download-btn" class="block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition duration-200" download="burmese_recap.mp3">အသံဖိုင်ကို ဒေါင်းလုဒ်လုပ်ရန်</a>
+        </div>
+        
+        <div id="error-box" class="mt-4 p-3 bg-rose-900/50 border border-rose-700 text-rose-200 rounded-xl text-sm hidden"></div>
+    </div>
+
+    <script>
+        document.getElementById('convert-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('convert-btn');
+            const errorBox = document.getElementById('error-box');
+            const resultSection = document.getElementById('result-section');
+            
+            errorBox.classList.add('hidden');
+            resultSection.classList.add('hidden');
+
+            const textInput = document.querySelector('.text-input').value.trim();
+            const voiceSelect = document.querySelector('.voice-select').value;
+
+            if (!textInput) {
+                errorBox.textContent = "ကျေးဇူးပြု၍ စာသားအနည်းဆုံး တစ်ခု ထည့်ပါ။";
+                errorBox.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = "အသံဖိုင် ဖန်တီးနေပါပြီ... ခဏစောင့်ပါ";
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: [{ text: textInput, voice: voiceSelect }] })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Something went wrong");
+                }
+
+                document.getElementById('quota-remaining').textContent = data.remaining;
+                
+                const audioPlayer = document.getElementById('audio-player');
+                const downloadBtn = document.getElementById('download-btn');
+                
+                audioPlayer.src = "/" + data.files[0] + "?t=" + new Date().getTime();
+                downloadBtn.href = "/" + data.files[0];
+                
+                resultSection.classList.remove('hidden');
+            } catch (err) {
+                errorBox.textContent = err.message;
+                errorBox.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "အသံဖိုင် ထုတ်ယူမည် (Generate Audio)";
+            }
+        });
+    </script>
+</body>
+</html>
