@@ -3,23 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Burmese AI Movie Recap Studio</title>
+    <title>Burmese AI Audio Studio</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
-    <div class="max-w-2xl mx-auto bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
-        <h1 class="text-2xl font-bold mb-2 text-center text-indigo-400">🎬 မြန်မာ AI ရုပ်ရှင်ဇာတ်လမ်းချုပ် စတူဒီယို</h1>
-        <p class="text-sm text-slate-400 text-center mb-6">ယနေ့ကျန်ရှိသော အသံထုတ်ယူခွင့်: <span id="quota-remaining" class="font-bold text-emerald-400">{{ remaining }}</span> / 3 ပုဒ်</p>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 flex items-center justify-center">
+    <div class="max-w-md w-full bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
+        <h1 class="text-xl font-bold mb-2 text-center text-indigo-400">🎙️ မြန်မာ AI အသံထွက်စတူဒီယို</h1>
+        <p class="text-xs text-slate-400 text-center mb-6">ယနေ့ကျန်ရှိသော အသံထုတ်ယူခွင့်: <span id="quota-remaining" class="font-bold text-emerald-400">{{ remaining }}</span> / 3 ပုဒ်</p>
 
-        <form id="recap-form" class="space-y-4">
+        <form id="audio-form" class="space-y-4">
             <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">ဗီဒီယိုဖိုင် တင်ရန် (Video Upload)</label>
-                <input type="file" id="video-input" accept="video/*" required class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500">
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">ဇာတ်လမ်းပြောမည့် စာသားများ (Voiceover Script)</label>
-                <textarea id="text-input" rows="4" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="ဇာတ်လမ်းပြောမည့် စာသားများကို ဤနေရာတွင် တဆက်တည်း ရိုက်ထည့်ပါ..."></textarea>
+                <label class="block text-sm font-medium text-slate-300 mb-2">ပြောလိုသော စာသားများ</label>
+                <textarea id="text-input" rows="4" required class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="ပြောလိုသော စာသားများကို ဤနေရာတွင် ရိုက်ထည့်ပါ..."></textarea>
             </div>
 
             <div>
@@ -30,20 +25,20 @@
                 </select>
             </div>
 
-            <button type="submit" id="convert-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition duration-200 shadow-lg">ဗီဒီယိုနှင့် အသံပေါင်းစပ်မည် (Generate Recap)</button>
+            <button type="submit" id="convert-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition duration-200 shadow-lg">အသံဖိုင် ထုတ်ယူမည် (Generate Audio)</button>
         </form>
 
         <div id="result-section" class="mt-6 hidden">
-            <h2 class="text-lg font-semibold mb-2 text-slate-300">ရလဒ် ဗီဒီယို:</h2>
-            <video id="video-player" controls class="w-full rounded-xl mb-4 border border-slate-700"></video>
-            <a id="download-btn" class="block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition duration-200" download="movie_recap.mp4">ဗီဒီယိုကို ဒေါင်းလုဒ်လုပ်ရန်</a>
+            <h2 class="text-sm font-semibold mb-2 text-slate-300">ရလဒ် အသံဖိုင်:</h2>
+            <audio id="audio-player" controls class="w-full mb-4"></audio>
+            <a id="download-btn" class="block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition duration-200 text-sm" download="burmese_audio.mp3">အသံဖိုင် ဒေါင်းလုဒ်လုပ်ရန်</a>
         </div>
         
-        <div id="error-box" class="mt-4 p-3 bg-rose-900/50 border border-rose-700 text-rose-200 rounded-xl text-sm hidden"></div>
+        <div id="error-box" class="mt-4 p-3 bg-rose-900/50 border border-rose-700 text-rose-200 rounded-xl text-xs hidden"></div>
     </div>
 
     <script>
-        document.getElementById('recap-form').addEventListener('submit', async (e) => {
+        document.getElementById('audio-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('convert-btn');
             const errorBox = document.getElementById('error-box');
@@ -52,23 +47,21 @@
             errorBox.classList.add('hidden');
             resultSection.classList.add('hidden');
 
-            const videoFile = document.getElementById('video-input').files[0];
             const textInput = document.getElementById('text-input').value.trim();
             const voiceSelect = document.getElementById('voice-select').value;
 
-            if (!videoFile || !textInput) {
-                errorBox.textContent = "ကျေးဇူးပြု၍ ဗီဒီယိုနှင့် စာသား နှစ်ခုစလုံး ဖြည့်စွက်ပါ။";
+            if (!textInput) {
+                errorBox.textContent = "ကျေးဇူးပြု၍ စာသားထည့်ပါ။";
                 errorBox.classList.remove('hidden');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('video', videoFile);
             formData.append('text', textInput);
             formData.append('voice', voiceSelect);
 
             btn.disabled = true;
-            btn.textContent = "ဗီဒီယိုနှင့် အသံကို ပုံဖော်နေပါပြီ... ခဏစောင့်ပါ...";
+            btn.textContent = "အသံဖိုင် ဖန်တီးနေပါပြီ... ခဏစောင့်ပါ...";
 
             try {
                 const response = await fetch('/convert', {
@@ -84,11 +77,11 @@
 
                 document.getElementById('quota-remaining').textContent = data.remaining;
                 
-                const videoPlayer = document.getElementById('video-player');
+                const audioPlayer = document.getElementById('audio-player');
                 const downloadBtn = document.getElementById('download-btn');
                 
-                videoPlayer.src = data.video_url + "?t=" + new Date().getTime();
-                downloadBtn.href = data.video_url;
+                audioPlayer.src = data.audio_url + "?t=" + new Date().getTime();
+                downloadBtn.href = data.audio_url;
                 
                 resultSection.classList.remove('hidden');
             } catch (err) {
@@ -96,9 +89,9 @@
                 errorBox.classList.remove('hidden');
             } finally {
                 btn.disabled = false;
-                btn.textContent = "ဗီဒီယိုနှင့် အသံပေါင်းစပ်မည် (Generate Recap)";
+                btn.textContent = "အသံဖိုင် ထုတ်ယူမည် (Generate Audio)";
             }
         });
     </script>
 </body>
-</html>
+    </html>
