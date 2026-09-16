@@ -3,6 +3,7 @@ import asyncio
 from flask import Flask, render_template, request, jsonify, session
 import edge_tts
 from datetime import datetime
+import uuid
 
 app = Flask(__name__)
 app.secret_key = "u_kyaw_secure_secret_key_2026"
@@ -21,7 +22,6 @@ async def generate_audio(text, voice, filepath):
 @app.route('/')
 def index():
     if 'user_id' not in session:
-        import uuid
         session['user_id'] = str(uuid.uuid4())
     
     user_id = session['user_id']
@@ -31,12 +31,12 @@ def index():
         user_usage[user_id] = {"date": today_str, "count": 0}
 
     current_count = user_usage[user_id]["count"]
-    return render_template('index.html', remaining=DAILY_LIMIT - current_count)
+    return render_template('index.html', remaining=max(0, DAILY_LIMIT - current_count))
 
 @app.route('/convert', methods=['POST'])
 def convert():
     if 'user_id' not in session:
-        return jsonify({"error": "Unauthorized"}), 401
+        session['user_id'] = str(uuid.uuid4())
 
     user_id = session['user_id']
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -64,12 +64,12 @@ def convert():
 
         return jsonify({
             "audio_url": "/" + audio_path,
-            "remaining": remaining_quota
+            "remaining": max(0, remaining_quota)
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
-        
+    app.run(host='0.0.0.0', port=5000)
+
