@@ -1,94 +1,75 @@
 import os
-import tempfile
-from flask import Flask, render_template, request, jsonify, send_from_directory
-import edge_tts
 import asyncio
-from moviepy.editor import VideoFileClip, AudioFileClip
+from flask import Flask, render_template, request, jsonify, session
+import edge_tts
+from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = "u_kyaw_secure_secret_key_2026"
+UPLOAD_DIR = "static"
 
-# တစ်နေ့လျှင် အသံထုတ်ယူခွင့် ကန့်သတ်ချက်
-DAILY_QUOTA = 3
-usage_count = 0
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+user_usage = {}
+DAILY_LIMIT = 3
+
+async def generate_audio(text, voice, filepath):
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(filepath)
 
 @app.route('/')
 def index():
-    global usage_count
-    remaining = DAILY_QUOTA - usage_count
-    return render_template('index.html', remaining=max(0, remaining))
+    if 'user_id' not in session:
+        import uuid
+        session['user_id'] = str(uuid.uuid4())
+    
+    user_id = session['user_id']
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    if user_id not in user_usage or user_usage[user_id]["date"] != today_str:
+        user_usage[user_id] = {"date": today_str, "count": 0}
+
+    current_count = user_usage[user_id]["count"]
+    return render_template('index.html', remaining=DAILY_LIMIT - current_count)
 
 @app.route('/convert', methods=['POST'])
 def convert():
-    global usage_count
-    if usage_count >= DAILY_QUOTA:
-        return jsonify({'error': 'ယနေ့အတွက် အသံထုတ်ယူခွင့် (Quota) ကုန်ဆုံးသွားပါပြီ။'}), 429
+    if 'user_id' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
 
-    if 'video' not in request.files or 'text' not in request.form:
-        return jsonify({'error': 'ဗီဒီယိုဖိုင် သို့မဟုတ် စာသား မပါဝင်ပါ။'}), 400
+    user_id = session['user_id']
+    today_str = datetime.now().strftime("%Y-%m-%d")
 
-    video_file = request.files['video']
-    text = request.form['text']
-    voice = request.form.get('voice', 'my-MM-NilarNeural')
+    if user_id not in user_usage or user_usage[user_id]["date"] != today_str:
+        user_usage[user_id] = {"date": today_str, "count": 0}
 
-    if not video_file.filename or not text.strip():
-        return jsonify({'error': 'ကျေးဇူးပြု၍ ဗီဒီယိုနှင့် စာသားများကို အပြည့်အစုံ ဖြည့်စွက်ပါ။'}), 400
+    if user_usage[user_id]["count"] >= DAILY_LIMIT:
+        return jsonify({"error": "ယနေ့အတွက် အသံထုတ်ယူမှု ခွဲတမ်း (၃ ပုဒ်) ပြည့်သွားပါပြီ။"}), 403
 
     try:
-        # Temporary directory တွင် ဖိုင်များသိမ်းရန်
-        temp_dir = tempfile.mkdtemp()
-        input_video_path = os.path.join(temp_dir, 'input_video.mp4')
-        output_audio_path = os.path.join(temp_dir, 'output_audio.mp3')
-        output_video_path = os.path.join(temp_dir, 'output_video.mp4')
+        text = request.form.get('text', '').strip()
+        voice = request.form.get('voice', 'my-MM-NilarNeural')
 
-        video_file.save(input_video_path)
+        if not text:
+            return jsonify({"error": "ကျေးဇူးပြု၍ စာသားထည့်ပါ။"}), 400
 
-        # Edge TTS ဖြင့် အသံဖိုင်ထုတ်ယူခြင်း
-        async def generate_speech():
-            communicate = edge_tts.Communicate(text, voice)
-            await communicate.save(output_audio_path)
-
-        asyncio.run(generate_speech())
-
-        # MoviePy ဖြင့် ဗီဒီယိုနှင့် အသံပေါင်းစပ်ခြင်း
-        video_clip = VideoFileClip(input_video_path)
-        audio_clip = AudioFileClip(output_audio_path)
-
-        # ဗီဒီယို အတိုအရှည်ကို အသံအလျားနှင့် ချိန်ညှိခြင်း (သို့မဟုတ် အသံအတိုင်း ဗီဒီယိုကို ထားရှိခြင်း)
-        final_clip = video_clip.set_audio(audio_clip)
+        audio_filename = f"audio_{user_id[:5]}.mp3"
+        audio_path = os.path.join(UPLOAD_DIR, audio_filename)
         
-        # ဖိုင်ထုတ်ယူသိမ်းဆည်းခြင်း (Bitrate များကို လျှော့ချထားပြီး Render တွင် မြန်ဆန်စေရန်)
-        final_clip.write_videofile(
-            output_video_path,
-            codec='libx264',
-            audio_codec='aac',
-            fps=24,
-            preset='ultrafast',
-            logger=None
-        )
+        asyncio.run(generate_audio(text, voice, audio_path))
 
-        # Clip များကို ပိတ်သိမ်းရန်
-        video_clip.close()
-        audio_clip.close()
-        final_clip.close()
-
-        usage_count += 1
-        remaining = DAILY_QUOTA - usage_count
+        user_usage[user_id]["count"] += 1
+        remaining_quota = DAILY_LIMIT - user_usage[user_id]["count"]
 
         return jsonify({
-            'success': True,
-            'video_url': '/download_result',
-            'remaining': max(0, remaining)
+            "audio_url": "/" + audio_path,
+            "remaining": remaining_quota
         })
 
     except Exception as e:
-        return jsonify({'error': f'အမှားအယွင်း ဖြစ်ပေါ်သွားပါသည်: {str(e)}'}), 500
-
-@app.route('/download_result')
-def download_result():
-    # အဆင်သင့်ဖြစ်နေသော ဗီဒီယိုဖိုင်ကို ပြန်ပေးရန်
-    # (မှတ်ချက်။ ဤနေရာတွင် production အတွက် temp folder မှ ဖိုင်ကို လုံခြုံစွာ ပြန်ထုတ်ပေးရန် လိုအပ်သည်)
-    return send_from_directory(tempfile.gettempdir(), 'output_video.mp4', as_attachment=True)
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
         
